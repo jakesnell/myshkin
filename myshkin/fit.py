@@ -2,21 +2,7 @@ from operator import add
 
 import tensorflow as tf
 
-def reduce_batches(sess, bindings, feeder, updates=[]):
-    labels = bindings.keys()
-    rval = {k: 0.0 for k in labels}
-
-    n_examples = 0
-    for bs, feed in feeder.feeds(include_size=True):
-        batch_result = sess.run([bindings[label] for label in labels] + updates, feed)
-        for (label, val) in zip(labels, batch_result):
-            rval[label] += bs * val
-        n_examples += bs
-
-    for label in labels:
-        rval[label] /= n_examples
-
-    return rval
+from myshkin.util.feeder import reduce_batches
 
 def fit(model, optimizer, train_feeder, valid_feeder, n_epochs=100, callbacks=[]):
     monitor_fields = list(set(reduce(add, [callback.get_monitor_fields() for callback in callbacks])))
@@ -25,6 +11,9 @@ def fit(model, optimizer, train_feeder, valid_feeder, n_epochs=100, callbacks=[]
 
     with tf.Session() as sess:
         sess.run(tf.initialize_all_variables())
+
+        for callback in callbacks:
+            callback.register_sess(sess)
 
         train_fields = {field: model.train_view[field] for field in monitor_fields}
         valid_fields = {field: model.test_view[field] for field in monitor_fields}

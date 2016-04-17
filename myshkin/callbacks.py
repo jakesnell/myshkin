@@ -1,8 +1,10 @@
 import datetime
 from operator import add
 import os
+import time
 
 import numpy as np
+import tensorflow as tf
 
 class Callback(object):
     def get_monitor_fields(self):
@@ -10,6 +12,9 @@ class Callback(object):
 
     def stop_training(self):
         return False
+
+    def register_sess(self, sess):
+        pass
 
     def stop_training_message(self):
         raise NotImplementedError()
@@ -135,3 +140,37 @@ class EarlyStopping(Callback):
 
     def stop_training_message(self):
         return "Patience {:d} exceeded: minimum validation {:s} of {:0.8f} achieved at epoch {:d}".format(self.patience, self.monitor_field, self.opt_val, self.opt_epoch_ind)
+
+class ModelCheckpoint(Callback):
+    def __init__(self, out_dir, monitor_field, verbose=False):
+        self.out_dir = out_dir
+        self.monitor_field = monitor_field
+        self.verbose = verbose
+
+        self.opt_val = np.infty
+        self.saver = tf.train.Saver()
+
+        if not os.path.isdir(out_dir):
+            os.mkdir(out_dir)
+
+    def get_monitor_fields(self):
+        return [self.monitor_field]
+
+    def epoch_end(self, epoch_ind, model, train_stats, valid_stats):
+        cur_val = valid_stats[self.monitor_field]
+
+        if cur_val < self.opt_val:
+            model_out_file = os.path.join(self.out_dir, "model.ckpt".format(epoch_ind))
+            conf_out_file = os.path.join(self.out_dir, 'model_conf.yaml')
+
+            self.opt_val = cur_val
+            t_start = time.time()
+            self.saver.save(self.sess, model_out_file)
+            model.save_conf(conf_out_file)
+            t_elapsed = time.time() - t_start
+
+            if self.verbose:
+                print "> validation {:s} of {:0.8f}, saved to {:s} ({:0.2f}s)".format(self.monitor_field, cur_val, model_out_file, t_elapsed)
+
+    def register_sess(self, sess):
+        self.sess = sess

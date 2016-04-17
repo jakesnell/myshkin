@@ -22,3 +22,19 @@ class Feeder(object):
             else:
                 yield feed_dict
             ind = batch_end
+
+def reduce_batches(sess, bindings, feeder, updates=[]):
+    labels = bindings.keys()
+    rval = {k: 0.0 for k in labels}
+
+    n_examples = 0
+    for bs, feed in feeder.feeds(include_size=True):
+        batch_result = sess.run([bindings[label] for label in labels] + updates, feed)
+        for (label, val) in zip(labels, batch_result):
+            rval[label] += bs * val
+        n_examples += bs
+
+    for label in labels:
+        rval[label] /= n_examples
+
+    return rval

@@ -4,7 +4,6 @@ Usage:
     train_mnist.py <modelconf> <learnconf> [--nodash]
 """
 import os
-from operator import add
 from subprocess import call
 
 import numpy as np
@@ -44,19 +43,20 @@ def main():
 
     optimizer = tf.train.AdamOptimizer(learning_rate=1e-4)
 
-    exp_id = 'ff_mnist'
-
-    # TODO: Add model checkpointing
     callbacks = [DefaultLogger(['loss', 'err']),
                  DeepDashboardLogger(
-                     exp_id,
+                     learn_opts.exp_id,
                      [CSVLogger('loss.csv', 'Loss', ['loss']),
                       CSVLogger('err.csv', 'Classification Error', ['err'])]
                  ),
-                 EarlyStopping('loss', learn_opts.patience)]
+                 EarlyStopping('loss', learn_opts.patience),
+                 ModelCheckpoint(os.path.join(os.getenv('MYSHKIN_CHECKPOINTDIR', '.'),
+                                              learn_opts.exp_id),
+                                 'loss',
+                                 verbose=True)]
 
     if not args.nodash:
-        call(["open", "http://localhost/deep-dashboard/?id={:s}".format(exp_id)])
+        call(["open", "http://localhost/deep-dashboard/?id={:s}".format(learn_opts.exp_id)])
 
     fit(model,
         optimizer,
