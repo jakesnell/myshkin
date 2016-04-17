@@ -76,6 +76,38 @@ class DeepDashboardSubLogger(Callback):
     def get_catalog_entry(self):
         raise NotImplementedError()
 
+class RawLogger(DeepDashboardSubLogger):
+    def __init__(self, base_file, label, monitor_fields):
+        self.base_file = base_file
+        self.label = label
+        self.monitor_fields = monitor_fields
+
+    def get_catalog_entry(self):
+        return "{:s},plain,{:s}".format(os.path.basename(self.base_file), self.label)
+
+    def get_file_name(self):
+        return os.path.join(self.master.outdir, self.base_file)
+
+    def get_monitor_fields(self):
+        return self.monitor_fields
+
+    def register_master(self, master):
+        DeepDashboardSubLogger.register_master(self, master)
+
+        with open(self.get_file_name(), 'w') as fid:
+            pass
+
+    def epoch_end(self, epoch_ind, model, train_stats, valid_stats):
+        train_strings = []
+        valid_strings = []
+
+        for field in self.monitor_fields:
+            train_strings.append("train {:s} = {:0.8f}".format(field, train_stats[field]))
+            valid_strings.append("valid {:s} = {:0.8f}".format(field, valid_stats[field]))
+
+        with open(self.get_file_name(), 'a') as fid:
+            fid.write("Epoch {:d}: {:s}, {:s}\n".format(epoch_ind, ", ".join(train_strings), ", ".join(valid_strings)))
+
 class CSVLogger(DeepDashboardSubLogger):
     def __init__(self, base_file, label, monitor_fields):
         self.base_file = base_file

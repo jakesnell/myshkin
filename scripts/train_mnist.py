@@ -19,7 +19,10 @@ from myshkin.util.load import load_model, load_learn_opts
 def main():
     args = get_args(__doc__)
 
-    with tf.device('/cpu:0'):
+    tf_device = os.getenv('TENSORFLOW_DEVICE', '/cpu:0')
+    print "using device {:s}".format(tf_device)
+
+    with tf.device(tf_device):
         tf.set_random_seed(1234)
         np.random.seed(1234)
 
@@ -47,7 +50,8 @@ def main():
         callbacks = [DefaultLogger(['loss', 'err']),
                      DeepDashboardLogger(
                          learn_opts.exp_id,
-                         [CSVLogger('loss.csv', 'Loss', ['loss']),
+                         [RawLogger('out.log', 'Log', ['loss', 'err']),
+			  CSVLogger('loss.csv', 'Loss', ['loss']),
                           CSVLogger('err.csv', 'Classification Error', ['err'])]
                      ),
                      EarlyStopping('loss', learn_opts.patience),

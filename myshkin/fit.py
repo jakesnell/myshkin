@@ -9,7 +9,7 @@ def fit(model, optimizer, train_feeder, valid_feeder, n_epochs=100, callbacks=[]
 
     train_step = optimizer.minimize(model.train_view.loss)
 
-    with tf.Session() as sess:
+    with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as sess:
         sess.run(tf.initialize_all_variables())
 
         for callback in callbacks:
