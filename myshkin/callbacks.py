@@ -1,0 +1,137 @@
+import datetime
+from operator import add
+import os
+
+import numpy as np
+
+class Callback(object):
+    def get_monitor_fields(self):
+        raise NotImplementedError("get_monitor_fields not implemented for {:s}".format(self))
+
+    def stop_training(self):
+        return False
+
+    def stop_training_message(self):
+        raise NotImplementedError()
+
+class DefaultLogger(Callback):
+    def __init__(self, monitor_fields):
+        self.monitor_fields = monitor_fields
+
+    def get_monitor_fields(self):
+        return self.monitor_fields
+
+    def epoch_end(self, epoch_ind, model, train_stats, valid_stats):
+        train_strings = []
+        valid_strings = []
+
+        for field in self.monitor_fields:
+            train_strings.append("train {:s} = {:0.8f}".format(field, train_stats[field]))
+            valid_strings.append("valid {:s} = {:0.8f}".format(field, valid_stats[field]))
+
+        print "Epoch {:d}: {:s}, {:s}".format(epoch_ind, ", ".join(train_strings), ", ".join(valid_strings))
+
+class DeepDashboardLogger(Callback):
+    def __init__(self, exp_id, loggers):
+        self.exp_id = exp_id
+        self.loggers = loggers
+
+        webserver_root = os.getenv('APACHE_ROOT')
+        if webserver_root is None:
+            self.outdir = exp_id
+        else:
+            self.outdir = os.path.join(webserver_root, 'results', exp_id)
+
+        if not os.path.isdir(self.outdir):
+            os.mkdir(self.outdir)
+
+        self.write_catalog(os.path.join(self.outdir, 'catalog'))
+
+        for logger in self.loggers:
+            logger.register_master(self)
+
+    def get_monitor_fields(self):
+        return list(set(reduce(add, [logger.get_monitor_fields() for logger in self.loggers])))
+
+    def write_catalog(self, file_name):
+        with open(file_name, 'w') as fid:
+            fid.write("filename,type,name\n")
+
+            for logger in self.loggers:
+                fid.write(logger.get_catalog_entry()+"\n")
+
+    def epoch_end(self, epoch_ind, model, train_stats, valid_stats):
+        for logger in self.loggers:
+            logger.epoch_end(epoch_ind, model, train_stats, valid_stats)
+
+class DeepDashboardSubLogger(Callback):
+    def register_master(self, master):
+        self.master = master
+
+    def get_catalog_entry(self):
+        raise NotImplementedError()
+
+class CSVLogger(DeepDashboardSubLogger):
+    def __init__(self, base_file, label, monitor_fields):
+        self.base_file = base_file
+        self.label = label
+        self.monitor_fields = monitor_fields
+        self.train_labels = ["train {:s}".format(field) for field in monitor_fields]
+        self.valid_labels = ["valid {:s}".format(field) for field in monitor_fields]
+
+    def get_catalog_entry(self):
+        return "{:s},csv,{:s}".format(os.path.basename(self.base_file), self.label)
+
+    def get_file_name(self):
+        return os.path.join(self.master.outdir, self.base_file)
+
+    def get_monitor_fields(self):
+        return self.monitor_fields
+
+    def register_master(self, master):
+        DeepDashboardSubLogger.register_master(self, master)
+
+        with open(self.get_file_name(), 'w') as fid:
+            fid.write("step,time,{:s},{:s}\n".format(",".join(self.train_labels),
+                                                     ",".join(self.valid_labels)))
+
+    def epoch_end(self, epoch_ind, model, train_stats, valid_stats):
+        time_str = datetime.datetime.utcnow().isoformat()
+
+        with open(self.get_file_name(), 'a') as fid:
+            train_strings = ["{:0.8f}".format(train_stats[field]) for field in self.monitor_fields]
+            valid_strings = ["{:0.8f}".format(valid_stats[field]) for field in self.monitor_fields]
+            fid.write("{:d},{:s},{:s},{:s}\n".format(epoch_ind,
+                                                     time_str,
+                                                     ",".join(train_strings),
+                                                     ",".join(valid_strings)))
+
+class EarlyStopping(Callback):
+    def __init__(self, monitor_field, patience):
+        self.monitor_field = monitor_field
+        self.patience = patience
+
+        self.opt_val = np.infty
+        self.opt_epoch_ind = -1
+
+        self._stop_training = False
+
+    def get_monitor_fields(self):
+        return [self.monitor_field]
+
+    def epoch_end(self, epoch_ind, model, train_stats, valid_stats):
+        cur_val = valid_stats[self.monitor_field]
+
+        if cur_val < self.opt_val:
+            self.opt_val = cur_val
+            self.opt_epoch_ind = epoch_ind
+            self._stop_training = False
+        else:
+            if epoch_ind - self.opt_epoch_ind > self.patience:
+                self._stop_training = True
+
+    def stop_training(self):
+        return self._stop_training
+
+    def stop_training_message(self):
+        return "Patience {:d} exceeded: minimum validation {:s} of {:0.8f} achieved at epoch {:d}".format(self.patience, self.monitor_field, self.opt_val, self.opt_epoch_ind)

@@ -1,0 +1,6 @@
+model: Feedforward
+opts:
+    k: 784 # input dimension
+    hid_dims: [500, 500] # hidden dimensions
+    c: 10 # output dimension
+    dropout: 0.5 # keep probability for dropout
