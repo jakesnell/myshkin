@@ -4,7 +4,12 @@ import os
 import time
 
 import numpy as np
+import matplotlib.pyplot as plt
 import tensorflow as tf
+
+from PIL import Image
+
+from myshkin.util.feeder import reduce_batches
 
 class Callback(object):
     def get_monitor_fields(self):
@@ -23,10 +28,16 @@ class DefaultLogger(Callback):
     def __init__(self, monitor_fields):
         self.monitor_fields = monitor_fields
 
+        self.t_start = time.time()
+
     def get_monitor_fields(self):
         return self.monitor_fields
 
-    def epoch_end(self, epoch_ind, model, train_stats, valid_stats):
+    def epoch_end(self, epoch_ind, sess, model, train_stats, valid_stats):
+        t_next = time.time()
+        t_elapsed = t_next - self.t_start
+        self.t_start = t_next
+
         train_strings = []
         valid_strings = []
 
@@ -34,7 +45,7 @@ class DefaultLogger(Callback):
             train_strings.append("train {:s} = {:0.8f}".format(field, train_stats[field]))
             valid_strings.append("valid {:s} = {:0.8f}".format(field, valid_stats[field]))
 
-        print "Epoch {:d}: {:s}, {:s}".format(epoch_ind, ", ".join(train_strings), ", ".join(valid_strings))
+        print "Epoch {:d}: {:s}, {:s} ({:0.2f}s)".format(epoch_ind, ", ".join(train_strings), ", ".join(valid_strings), t_elapsed)
 
 class DeepDashboardLogger(Callback):
     def __init__(self, exp_id, loggers):
@@ -65,9 +76,9 @@ class DeepDashboardLogger(Callback):
             for logger in self.loggers:
                 fid.write(logger.get_catalog_entry()+"\n")
 
-    def epoch_end(self, epoch_ind, model, train_stats, valid_stats):
+    def epoch_end(self, epoch_ind, sess, model, train_stats, valid_stats):
         for logger in self.loggers:
-            logger.epoch_end(epoch_ind, model, train_stats, valid_stats)
+            logger.epoch_end(epoch_ind, sess, model, train_stats, valid_stats)
 
 class DeepDashboardSubLogger(Callback):
     def register_master(self, master):
@@ -76,17 +87,19 @@ class DeepDashboardSubLogger(Callback):
     def get_catalog_entry(self):
         raise NotImplementedError()
 
+    def get_file_name(self):
+        return os.path.join(self.master.outdir, self.base_file)
+
 class RawLogger(DeepDashboardSubLogger):
     def __init__(self, base_file, label, monitor_fields):
         self.base_file = base_file
         self.label = label
         self.monitor_fields = monitor_fields
 
+        self.t_start = time.time()
+
     def get_catalog_entry(self):
         return "{:s},plain,{:s}".format(os.path.basename(self.base_file), self.label)
-
-    def get_file_name(self):
-        return os.path.join(self.master.outdir, self.base_file)
 
     def get_monitor_fields(self):
         return self.monitor_fields
@@ -97,7 +110,11 @@ class RawLogger(DeepDashboardSubLogger):
         with open(self.get_file_name(), 'w') as fid:
             pass
 
-    def epoch_end(self, epoch_ind, model, train_stats, valid_stats):
+    def epoch_end(self, epoch_ind, sess, model, train_stats, valid_stats):
+        t_next = time.time()
+        t_elapsed = t_next - self.t_start
+        self.t_start = t_next
+
         train_strings = []
         valid_strings = []
 
@@ -106,7 +123,7 @@ class RawLogger(DeepDashboardSubLogger):
             valid_strings.append("valid {:s} = {:0.8f}".format(field, valid_stats[field]))
 
         with open(self.get_file_name(), 'a') as fid:
-            fid.write("Epoch {:d}: {:s}, {:s}\n".format(epoch_ind, ", ".join(train_strings), ", ".join(valid_strings)))
+            fid.write("Epoch {:d}: {:s}, {:s} ({:0.2f}s)\n".format(epoch_ind, ", ".join(train_strings), ", ".join(valid_strings), t_elapsed))
 
 class CSVLogger(DeepDashboardSubLogger):
     def __init__(self, base_file, label, monitor_fields):
@@ -119,9 +136,6 @@ class CSVLogger(DeepDashboardSubLogger):
     def get_catalog_entry(self):
         return "{:s},csv,{:s}".format(os.path.basename(self.base_file), self.label)
 
-    def get_file_name(self):
-        return os.path.join(self.master.outdir, self.base_file)
-
     def get_monitor_fields(self):
         return self.monitor_fields
 
@@ -132,7 +146,7 @@ class CSVLogger(DeepDashboardSubLogger):
             fid.write("step,time,{:s},{:s}\n".format(",".join(self.train_labels),
                                                      ",".join(self.valid_labels)))
 
-    def epoch_end(self, epoch_ind, model, train_stats, valid_stats):
+    def epoch_end(self, epoch_ind, sess, model, train_stats, valid_stats):
         time_str = datetime.datetime.utcnow().isoformat()
 
         with open(self.get_file_name(), 'a') as fid:
@@ -142,6 +156,60 @@ class CSVLogger(DeepDashboardSubLogger):
                                                      time_str,
                                                      ",".join(train_strings),
                                                      ",".join(valid_strings)))
+
+class ImageLogger(DeepDashboardSubLogger):
+    def __init__(self, base_file, label, image_tensors, feeder, n_cols):
+        self.base_file = base_file
+        self.label = label
+        self.image_tensors = image_tensors
+        self.feeder = feeder
+        self.n_cols = n_cols
+
+    def get_catalog_entry(self):
+        return "{:s},image,{:s}".format(os.path.basename(self.base_file), self.label)
+
+    def get_monitor_fields(self):
+        return []
+
+    def patch_view(self, arr, n_cols, border_width=1):
+        n_images, h, w = arr.shape
+        n_rows = int(np.ceil(1.0 * n_images / n_cols))
+
+        rval = np.zeros((n_rows * (h + border_width) + border_width + 1,
+                        n_cols * (w + border_width) + border_width))
+        rval[-1:, :] = 1.0
+
+        for ind in xrange(n_images):
+            i = int(np.floor(ind / n_cols)) * (h + border_width) + border_width
+            j = (ind % n_cols) * (w + border_width) + border_width
+            rval[i:i+h, j:j+w] = arr[ind]
+
+        return rval
+
+    def interleave(self, arrs):
+        arr_shape = arrs[0].shape
+        for i in xrange(1, len(arrs)):
+            assert arrs[i].shape == arr_shape
+
+        rval = np.empty((arr_shape[0] * len(arrs),) + arr_shape[1:])
+
+        for j in xrange(arr_shape[0]):
+            for (i, arr) in enumerate(arrs):
+                rval[j * len(arrs) + i] = arr[j]
+
+        return rval
+
+    def epoch_end(self, epoch_ind, sess, model, train_stats, valid_stats):
+        images = reduce_batches(sess,
+                    {
+                        i: image_tensor
+                        for (i, image_tensor) in enumerate(self.image_tensors)
+                    },
+                    self.feeder,
+                    shuffle=False)
+        image_arr = self.interleave([images[i] for i in xrange(len(self.image_tensors))])
+        im = Image.fromarray(255.0 * self.patch_view(image_arr, self.n_cols)).convert('RGB')
+        im.save(self.get_file_name())
 
 class EarlyStopping(Callback):
     def __init__(self, monitor_field, patience):
@@ -156,7 +224,7 @@ class EarlyStopping(Callback):
     def get_monitor_fields(self):
         return [self.monitor_field]
 
-    def epoch_end(self, epoch_ind, model, train_stats, valid_stats):
+    def epoch_end(self, epoch_ind, sess, model, train_stats, valid_stats):
         cur_val = valid_stats[self.monitor_field]
 
         if cur_val < self.opt_val:
@@ -188,7 +256,7 @@ class ModelCheckpoint(Callback):
     def get_monitor_fields(self):
         return [self.monitor_field]
 
-    def epoch_end(self, epoch_ind, model, train_stats, valid_stats):
+    def epoch_end(self, epoch_ind, sess, model, train_stats, valid_stats):
         cur_val = valid_stats[self.monitor_field]
 
         if cur_val < self.opt_val:

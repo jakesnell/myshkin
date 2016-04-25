@@ -23,7 +23,7 @@ def fit(model, optimizer, train_feeder, valid_feeder, n_epochs=100, callbacks=[]
             valid_stats = reduce_batches(sess, valid_fields, valid_feeder)
 
             for callback in callbacks:
-                callback.epoch_end(ie, model, train_stats, valid_stats)
+                callback.epoch_end(ie, sess, model, train_stats, valid_stats)
 
             if any([callback.stop_training() for callback in callbacks]):
                 break
