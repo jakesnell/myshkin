@@ -13,7 +13,7 @@ from myshkin.callbacks import *
 from myshkin.data.mnist import load_mnist
 from myshkin.fit import fit
 from myshkin.util.args import get_args
-from myshkin.util.feeder import Feeder
+from myshkin.util.feeder import Feeder, FeedArray
 from myshkin.util.load import load_model, load_learn_opts
 
 def main():
@@ -32,15 +32,15 @@ def main():
         mnist_data = load_mnist()
 
         train_feeder = Feeder({
-                model.train_view.x_bk: mnist_data.x_train,
-                model.train_view.y_b: mnist_data.y_train
+                model.train_view.x_bk: FeedArray(mnist_data.x_train),
+                model.train_view.y_b: FeedArray(mnist_data.y_train)
             },
             batch_size=learn_opts.batch_size
         )
 
         valid_feeder = Feeder({
-                model.test_view.x_bk: mnist_data.x_valid,
-                model.test_view.y_b: mnist_data.y_valid
+                model.test_view.x_bk: FeedArray(mnist_data.x_valid),
+                model.test_view.y_b: FeedArray(mnist_data.y_valid)
             },
             batch_size=learn_opts.batch_size
         )
