@@ -42,7 +42,8 @@ class Feedforward(Model):
         self.test_view = self.build(False)
 
     def build(self, train):
-        log_y_hat_bc = self.log_classifier.apply(self.x_bk, train)
+        log_classifier_seq = self.log_classifier.apply_seq(self.x_bk, train)
+        log_y_hat_bc = log_classifier_seq[-1]
         loss_b = tf.nn.sparse_softmax_cross_entropy_with_logits(log_y_hat_bc, self.y_b)
         loss = tf.reduce_mean(loss_b)
 
@@ -56,6 +57,7 @@ class Feedforward(Model):
             'x_bk': self.x_bk,
             'y_b': self.y_b,
             'y_hat_bc': y_hat_bc,
+            'z_bh': log_classifier_seq[-2],
             'loss': loss,
             'acc': acc,
             'err': err

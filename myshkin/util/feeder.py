@@ -11,12 +11,13 @@ class FeedArray(object):
         return self.arr[indices]
 
 class FeedRandomStream(object):
-    def __init__(self, fun):
+    def __init__(self, fun, n_examples=None):
         # fun: function from batch_size => random array
         self.fun = fun
+        self.n_examples = n_examples
 
     def get_num_examples(self):
-        return None
+        return self.n_examples
 
     def get_examples(self, indices):
         return self.fun(len(indices))

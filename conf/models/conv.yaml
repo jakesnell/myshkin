@@ -1,0 +1,6 @@
+model: Conv
+opts:
+    h: 28
+    conv_dims: [128, 256]
+    hid_dims: [500, 500] # hidden dimensions
+    c: 10 # output dimension

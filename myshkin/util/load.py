@@ -3,10 +3,13 @@ import importlib
 import yaml
 
 def load_model(opts_file, model_module='myshkin.models', **kwargs):
-    mod = importlib.import_module(model_module)
-
     with open(opts_file, 'r') as f:
         opts_dict = AttrDict(yaml.load(f))
+
+    return load_model_from_dict(opts_dict, model_module=model_module, **kwargs)
+
+def load_model_from_dict(opts_dict, model_module='myshkin.models', **kwargs):
+    mod = importlib.import_module(model_module)
 
     model_type = getattr(mod, opts_dict.model)
     opts_type = getattr(mod, opts_dict.model + 'Opts')

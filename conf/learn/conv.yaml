@@ -1,0 +1,4 @@
+n_epochs: 1000
+batch_size: 128
+patience: 10
+exp_id: conv_mnist
