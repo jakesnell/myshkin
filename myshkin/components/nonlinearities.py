@@ -4,7 +4,7 @@ class Identity(object):
     def __init__(self):
         pass
 
-    def apply(self, x, train):
+    def apply(self, x):
         return x
 
     def __repr__(self):
@@ -14,7 +14,7 @@ class Relu(object):
     def __init__(self):
         pass
 
-    def apply(self, x, train):
+    def apply(self, x):
         return tf.nn.relu(x)
 
     def __repr__(self):
@@ -24,7 +24,7 @@ class Sigmoid(object):
     def __init__(self):
         pass
 
-    def apply(self, x, train):
+    def apply(self, x):
         return tf.nn.sigmoid(x)
 
     def __repr__(self):

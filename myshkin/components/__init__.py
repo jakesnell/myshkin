@@ -1,4 +1,4 @@
-from conv import Convolution2D, MaxPool2D
+from conv import MaxPool2D
 from image import ResizeNearestNeighbor
 from nonlinearities import Identity, Relu, Sigmoid
 from reshape import Reshape

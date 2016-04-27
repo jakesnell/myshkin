@@ -2,6 +2,8 @@ from attrdict import AttrDict
 from collections import namedtuple
 
 import tensorflow as tf
+import keras
+from keras.layers import Activation, Dense, Dropout, Flatten, Convolution2D, MaxPooling2D
 
 from myshkin.components import *
 from myshkin.mixins.model import Model
@@ -29,41 +31,36 @@ class Conv(Model):
                                       shape=[None],
                                       name='y_b')
 
-            layers = []
-            cur_dim = 1
+            self.log_classifier = keras.models.Sequential()
+
             layer_ind = 0
             for next_dim in opts.conv_dims:
-                layers.append(Convolution2D(cur_dim, next_dim, (5, 5), (1, 1),
-                                                name="conv_layer{:d}".format(layer_ind),
-                                                border_mode="SAME"))
-                layers.append(Relu())
-                layers.append(MaxPool2D())
-                cur_dim = next_dim
+                self.log_classifier.add(Convolution2D(next_dim, 5, 5,
+                                                      name="conv_layer{:d}".format(layer_ind),
+                                                      border_mode='same',
+                                                      dim_ordering='th',
+                                                      input_shape=(1, self.opts.h // (2**layer_ind), self.opts.h // (2**layer_ind))))
+                self.log_classifier.add(Activation('relu'))
+                self.log_classifier.add(MaxPooling2D(pool_size=(2, 2), border_mode='same', dim_ordering='th'))
                 layer_ind += 1
 
-            fc_dim = cur_dim * (self.opts.h ** 2) // (4 ** len(self.opts.conv_dims))
-            layers.append(Reshape((-1, fc_dim)))
+            self.log_classifier.add(Flatten())
 
             layer_ind = 0
-            cur_dim = fc_dim
             for next_dim in opts.hid_dims:
-                layers.append(Affine(cur_dim, next_dim, name="fc_layer{:d}".format(layer_ind)))
-                layers.append(Relu())
-                layers.append(Dropout(self.opts.dropout))
-                cur_dim = next_dim
+                self.log_classifier.add(Dense(next_dim, activation='relu', name="fc_layer{:d}".format(layer_ind)))
+                self.log_classifier.add(Dropout(self.opts.dropout))
                 layer_ind += 1
 
-            layers.append(Affine(cur_dim, self.opts.c, name="fc_layer{:d}".format(layer_ind)))
+            self.z_bm = self.log_classifier.output # penultimate layer
 
-            self.log_classifier = Sequential(layers)
+            self.log_classifier.add(Dense(self.opts.c, name="fc_layer{:d}".format(layer_ind)))
 
-            self.train_view = self.build(self.x_bhh, True)
-            self.test_view = self.build(self.x_bhh, False)
+            self.view = self.build(self.x_bhh)
 
-    def build(self, x_bhh, train):
-        x_bhh1 = tf.reshape(x_bhh, [-1, self.opts.h, self.opts.h, 1])
-        log_classifier_seq = self.log_classifier.apply_seq(x_bhh1, train)
-        log_y_hat_bc = log_classifier_seq[-1]
+    def build(self, x_bhh):
+        x_b1hh = tf.reshape(x_bhh, [-1, 1, self.opts.h, self.opts.h])
+        log_y_hat_bc = self.log_classifier(x_b1hh)
         loss_b = tf.nn.sparse_softmax_cross_entropy_with_logits(log_y_hat_bc, self.y_b)
         loss = tf.reduce_mean(loss_b)
 
@@ -77,7 +74,7 @@ class Conv(Model):
             'x_bhh': x_bhh,
             'y_b': self.y_b,
             'y_hat_bc': y_hat_bc,
-            'z_bm': log_classifier_seq[-2],
+            'z_bm': self.z_bm,
             'loss': loss,
             'acc': acc,
             'err': err

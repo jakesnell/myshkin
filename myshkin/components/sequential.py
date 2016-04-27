@@ -2,8 +2,8 @@ class Sequential(object):
     def __init__(self, components):
         self.components = components
 
-    def apply(self, x, train):
-        return self.apply_seq(x, train)[-1]
+    def apply(self, x):
+        return self.apply_seq(x)[-1]
 
     def apply_seq(self, x):
         rval = [x]

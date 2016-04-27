@@ -4,7 +4,7 @@ class Reshape(object):
     def __init__(self, dest_shape):
         self.dest_shape = dest_shape
 
-    def apply(self, x, train):
+    def apply(self, x):
         return tf.reshape(x, self.dest_shape)
 
     def __repr__(self):

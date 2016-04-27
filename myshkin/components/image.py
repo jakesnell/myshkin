@@ -4,7 +4,7 @@ class ResizeNearestNeighbor(object):
     def __init__(self, new_shape):
         self.new_shape = new_shape
 
-    def apply(self, x, train):
+    def apply(self, x):
         return tf.image.resize_nearest_neighbor(x, self.new_shape)
 
     def __repr__(self):

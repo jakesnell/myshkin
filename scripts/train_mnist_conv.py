@@ -9,20 +9,20 @@ from subprocess import call
 import numpy as np
 import tensorflow as tf
 
+from keras import backend as K
+
 from myshkin.callbacks import *
 from myshkin.data.mnist import load_mnist
 from myshkin.fit import fit
 from myshkin.util.args import get_args
-from myshkin.util.feeder import Feeder, FeedArray
+from myshkin.util.feeder import Feeder, FeedArray, FeedRandomStream
 from myshkin.util.load import load_model, load_learn_opts
+from myshkin.util.session import get_device, get_session
 
 def main():
     args = get_args(__doc__)
 
-    tf_device = os.getenv('TENSORFLOW_DEVICE', '/cpu:0')
-    print "using device {:s}".format(tf_device)
-
-    with tf.device(tf_device):
+    with get_session() as sess, get_device():
         tf.set_random_seed(1234)
         np.random.seed(1234)
 
@@ -32,15 +32,17 @@ def main():
         mnist_data = load_mnist()
 
         train_feeder = Feeder({
-                model.train_view.x_bhh: FeedArray(mnist_data.x_train.reshape((-1, 28, 28))),
-                model.train_view.y_b: FeedArray(mnist_data.y_train)
+                model.view.x_bhh: FeedArray(mnist_data.x_train.reshape((-1, 28, 28))),
+                model.view.y_b: FeedArray(mnist_data.y_train),
+                K.learning_phase(): FeedRandomStream(lambda b: 1)
             },
             batch_size=learn_opts.batch_size
         )
 
         valid_feeder = Feeder({
-                model.test_view.x_bhh: FeedArray(mnist_data.x_valid.reshape((-1, 28, 28))),
-                model.test_view.y_b: FeedArray(mnist_data.y_valid)
+                model.view.x_bhh: FeedArray(mnist_data.x_valid.reshape((-1, 28, 28))),
+                model.view.y_b: FeedArray(mnist_data.y_valid),
+                K.learning_phase(): FeedRandomStream(lambda b: 1)
             },
             batch_size=learn_opts.batch_size
         )
@@ -69,6 +71,7 @@ def main():
             optimizer,
             train_feeder,
             valid_feeder,
+            sess,
             callbacks=callbacks,
             n_epochs=learn_opts.n_epochs)
 

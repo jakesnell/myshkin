@@ -17,19 +17,14 @@ from myshkin.fit import fit
 from myshkin.util.args import get_args
 from myshkin.util.feeder import Feeder, FeedArray, FeedRandomStream
 from myshkin.util.load import load_model, load_learn_opts
+from myshkin.util.session import get_device, get_session
 
 def main():
     args = get_args(__doc__)
 
-    tf_device = os.getenv('TENSORFLOW_DEVICE', '/cpu:0')
-    print "using device {:s}".format(tf_device)
-
-    with tf.device(tf_device):
+    with get_session() as sess, get_device():
         tf.set_random_seed(1234)
         np.random.seed(1234)
-
-        sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
-        K.set_session(sess)
 
         model = load_model(args.modelconf)
         learn_opts = load_learn_opts(args.learnconf)
@@ -58,7 +53,7 @@ def main():
                      DeepDashboardLogger(
                          learn_opts.exp_id,
                          [RawLogger('out.log', 'Log', ['loss', 'err']),
-			  CSVLogger('loss.csv', 'Loss', ['loss']),
+              CSVLogger('loss.csv', 'Loss', ['loss']),
                           CSVLogger('err.csv', 'Classification Error', ['err'])]
                      ),
                      EarlyStopping('loss', learn_opts.patience),
@@ -76,9 +71,9 @@ def main():
             optimizer,
             train_feeder,
             valid_feeder,
+            sess,
             callbacks=callbacks,
-            n_epochs=learn_opts.n_epochs,
-            sess=sess)
+            n_epochs=learn_opts.n_epochs)
 
 if __name__ == '__main__':
     main()
