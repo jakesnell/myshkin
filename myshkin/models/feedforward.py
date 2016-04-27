@@ -2,6 +2,7 @@ from attrdict import AttrDict
 from collections import namedtuple
 
 import tensorflow as tf
+from keras.layers import Dense, Dropout
 
 from myshkin.components import *
 from myshkin.mixins.model import Model
@@ -28,21 +29,19 @@ class Feedforward(Model):
         cur_dim = self.opts.k
         layer_ind = 0
         for next_dim in opts.hid_dims:
-            layers.append(Affine(cur_dim, next_dim, name="layer{:d}".format(layer_ind)))
-            layers.append(Relu())
+            layers.append(Dense(next_dim, activation='relu', name="layer{:d}".format(layer_ind)))
             layers.append(Dropout(self.opts.dropout))
             cur_dim = next_dim
             layer_ind += 1
 
-        layers.append(Affine(cur_dim, self.opts.c, name="layer{:d}".format(layer_ind)))
+        layers.append(Dense(self.opts.c, name="layer{:d}".format(layer_ind)))
 
         self.log_classifier = Sequential(layers)
 
-        self.train_view = self.build(True)
-        self.test_view = self.build(False)
+        self.view = self.build()
 
-    def build(self, train):
-        log_classifier_seq = self.log_classifier.apply_seq(self.x_bk, train)
+    def build(self):
+        log_classifier_seq = self.log_classifier.apply_seq(self.x_bk)
         log_y_hat_bc = log_classifier_seq[-1]
         loss_b = tf.nn.sparse_softmax_cross_entropy_with_logits(log_y_hat_bc, self.y_b)
         loss = tf.reduce_mean(loss_b)

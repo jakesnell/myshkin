@@ -9,10 +9,12 @@ import yaml
 import numpy as np
 import tensorflow as tf
 
+from keras import backend as K
+
 from myshkin.data.mnist import load_mnist
 from myshkin.evaluate import evaluate
 from myshkin.util.args import get_args
-from myshkin.util.feeder import Feeder
+from myshkin.util.feeder import Feeder, FeedArray, FeedRandomStream
 from myshkin.util.load import load_model, load_learn_opts
 
 def main():
@@ -21,24 +23,27 @@ def main():
     tf_device = os.getenv('TENSORFLOW_DEVICE', '/cpu:0')
     print "using device {:s}".format(tf_device)
 
-    with tf.device(tf_device):
-        tf.set_random_seed(1234)
-        np.random.seed(1234)
+    with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as sess:
+        K.set_session(sess)
 
-        model = load_model(os.path.join(args.checkpointdir, 'model_conf.yaml'))
+        with tf.device(tf_device):
+            tf.set_random_seed(1234)
+            np.random.seed(1234)
 
-        mnist_data = load_mnist()
+            model = load_model(os.path.join(args.checkpointdir, 'model_conf.yaml'))
 
-        test_feeder = Feeder({
-                model.test_view.x_bk: mnist_data.x_test,
-                model.test_view.y_b: mnist_data.y_test
-            },
-            batch_size=128
-        )
+            mnist_data = load_mnist()
 
-        saver = tf.train.Saver()
+            test_feeder = Feeder({
+                    model.view.x_bk: FeedArray(mnist_data.x_test),
+                    model.view.y_b: FeedArray(mnist_data.y_test),
+                    K.learning_phase(): FeedRandomStream(lambda b: 0)
+                },
+                batch_size=128
+            )
 
-        with tf.Session() as sess:
+            saver = tf.train.Saver()
+
             sess.run(tf.initialize_all_variables())
 
             # restore model parameters

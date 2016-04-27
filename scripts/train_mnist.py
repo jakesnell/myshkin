@@ -9,11 +9,13 @@ from subprocess import call
 import numpy as np
 import tensorflow as tf
 
+from keras import backend as K
+
 from myshkin.callbacks import *
 from myshkin.data.mnist import load_mnist
 from myshkin.fit import fit
 from myshkin.util.args import get_args
-from myshkin.util.feeder import Feeder, FeedArray
+from myshkin.util.feeder import Feeder, FeedArray, FeedRandomStream
 from myshkin.util.load import load_model, load_learn_opts
 
 def main():
@@ -26,21 +28,26 @@ def main():
         tf.set_random_seed(1234)
         np.random.seed(1234)
 
+        sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
+        K.set_session(sess)
+
         model = load_model(args.modelconf)
         learn_opts = load_learn_opts(args.learnconf)
 
         mnist_data = load_mnist()
 
         train_feeder = Feeder({
-                model.train_view.x_bk: FeedArray(mnist_data.x_train),
-                model.train_view.y_b: FeedArray(mnist_data.y_train)
+                model.view.x_bk: FeedArray(mnist_data.x_train),
+                model.view.y_b: FeedArray(mnist_data.y_train),
+                K.learning_phase(): FeedRandomStream(lambda b: 1)
             },
             batch_size=learn_opts.batch_size
         )
 
         valid_feeder = Feeder({
-                model.test_view.x_bk: FeedArray(mnist_data.x_valid),
-                model.test_view.y_b: FeedArray(mnist_data.y_valid)
+                model.view.x_bk: FeedArray(mnist_data.x_valid),
+                model.view.y_b: FeedArray(mnist_data.y_valid),
+                K.learning_phase(): FeedRandomStream(lambda b: 0)
             },
             batch_size=learn_opts.batch_size
         )
@@ -70,7 +77,8 @@ def main():
             train_feeder,
             valid_feeder,
             callbacks=callbacks,
-            n_epochs=learn_opts.n_epochs)
+            n_epochs=learn_opts.n_epochs,
+            sess=sess)
 
 if __name__ == '__main__':
     main()

@@ -5,10 +5,14 @@ class Sequential(object):
     def apply(self, x, train):
         return self.apply_seq(x, train)[-1]
 
-    def apply_seq(self, x, train):
+    def apply_seq(self, x):
         rval = [x]
         for component in self.components:
-            rval.append(component.apply(rval[-1], train))
+            if hasattr(component, 'apply'):
+                rval.append(component.apply(rval[-1]))
+            else:
+                # Keras component
+                rval.append(component(rval[-1]))
 
         return rval[1:]
 
