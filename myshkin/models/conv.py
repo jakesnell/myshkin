@@ -31,10 +31,10 @@ class Conv(Model):
                 self.pre_log_classifier.add(Convolution2D(next_dim, 5, 5,
                                                       name="conv_layer{:d}".format(layer_ind),
                                                       border_mode='same',
-                                                      dim_ordering='th',
-                                                      input_shape=(1, self.opts.h // (2**layer_ind), self.opts.h // (2**layer_ind))))
+                                                      dim_ordering='tf',
+                                                      input_shape=(self.opts.h // (2**layer_ind), self.opts.h // (2**layer_ind), 1)))
                 self.pre_log_classifier.add(Activation('relu'))
-                self.pre_log_classifier.add(MaxPooling2D(pool_size=(2, 2), border_mode='same', dim_ordering='th'))
+                self.pre_log_classifier.add(MaxPooling2D(pool_size=(2, 2), border_mode='same', dim_ordering='tf'))
                 layer_ind += 1
 
             self.pre_log_classifier.add(Flatten())
@@ -57,8 +57,8 @@ class Conv(Model):
                 self.view = self.build(self.x_bhh, self.y_b)
 
     def build(self, x_bhh, y_b=None):
-        x_b1hh = tf.reshape(x_bhh, [-1, 1, self.opts.h, self.opts.h])
-        z_bm = self.pre_log_classifier(x_b1hh)
+        x_bhh1 = tf.reshape(x_bhh, [-1, self.opts.h, self.opts.h, 1])
+        z_bm = self.pre_log_classifier(x_bhh1)
         log_y_hat_bc = self.final_layer(z_bm)
         y_hat_bc = tf.nn.softmax(log_y_hat_bc)
 
