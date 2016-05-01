@@ -42,7 +42,7 @@ def main():
         valid_feeder = Feeder({
                 model.view.x_bhh: FeedArray(mnist_data.x_valid.reshape((-1, 28, 28))),
                 model.view.y_b: FeedArray(mnist_data.y_valid),
-                K.learning_phase(): FeedRandomStream(lambda b: 1)
+                K.learning_phase(): FeedRandomStream(lambda b: 0)
             },
             batch_size=learn_opts.batch_size
         )
