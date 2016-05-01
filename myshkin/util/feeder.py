@@ -73,7 +73,7 @@ def reduce_batches(sess, bindings, feeder, updates=[], shuffle=True, verbose=Fal
             disp_strs = []
             for label in rval.keys():
                 if rval[label].shape == ():
-                    print disp_strs.append("{:s} = {:0.6f}".format(label, 1.0 * rval[label] / n_examples))
+                    disp_strs.append("{:s} = {:0.6f}".format(label, 1.0 * rval[label] / n_examples))
 
             print "[{:d}/{:d}] {:s}".format(n_examples, feeder.get_num_examples(), ", ".join(disp_strs))
 
