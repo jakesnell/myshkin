@@ -4,7 +4,7 @@ import tensorflow as tf
 
 from myshkin.util.feeder import reduce_batches
 
-def fit(model, optimizer, train_feeder, valid_feeder, sess, n_epochs=100, callbacks=[], train_vars=None):
+def fit(model, optimizer, train_feeder, valid_feeder, sess, n_epochs=100, callbacks=[], train_vars=None, verbose=False):
     monitor_fields = list(set(reduce(add, [callback.get_monitor_fields() for callback in callbacks])))
 
     if train_vars is None:
@@ -20,8 +20,8 @@ def fit(model, optimizer, train_feeder, valid_feeder, sess, n_epochs=100, callba
     fields = {field: model.view[field] for field in monitor_fields}
 
     for ie in xrange(n_epochs):
-        train_stats = reduce_batches(sess, fields, train_feeder, updates=[train_step])
-        valid_stats = reduce_batches(sess, fields, valid_feeder)
+        train_stats = reduce_batches(sess, fields, train_feeder, updates=[train_step], verbose=verbose)
+        valid_stats = reduce_batches(sess, fields, valid_feeder, verbose=verbose)
 
         for callback in callbacks:
             callback.epoch_end(ie, sess, model, train_stats, valid_stats)
