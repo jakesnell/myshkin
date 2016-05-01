@@ -1,3 +1,5 @@
+from collections import OrderedDict
+
 import numpy as np
 
 class FeedArray(object):
@@ -27,8 +29,11 @@ class Feeder(object):
         self.bindings = bindings
         self.batch_size = batch_size
 
+    def get_num_examples(self):
+        return self.bindings.values()[0].get_num_examples()
+
     def feeds(self, shuffle=True, include_size=False):
-        n_examples = self.bindings.values()[0].get_num_examples()
+        n_examples = self.get_num_examples()
         indices = np.arange(n_examples)
 
         if shuffle:
@@ -45,13 +50,13 @@ class Feeder(object):
                 yield feed_dict
             ind = batch_end
 
-def reduce_batches(sess, bindings, feeder, updates=[], shuffle=True):
+def reduce_batches(sess, bindings, feeder, updates=[], shuffle=True, verbose=False):
     # bindings: dict of label => tensor
     # feeder.bindings: dict of tensor => Feed
     compute_labels = [k for (k, v) in bindings.iteritems() if v not in feeder.bindings.keys()]
     feed_labels = [k for (k, v) in bindings.iteritems() if v in feeder.bindings.keys()]
 
-    rval = {}
+    rval = OrderedDict({})
 
     n_examples = 0
     for bs, feed in feeder.feeds(include_size=True, shuffle=shuffle):
@@ -63,6 +68,14 @@ def reduce_batches(sess, bindings, feeder, updates=[], shuffle=True):
                 rval[label] = np.concatenate([rval.get(label, np.empty((0,) + val.shape[1:])), val], axis=0)
 
         n_examples += bs
+
+        if verbose:
+            disp_strs = []
+            for label in rval.keys():
+                if rval[label].shape == ():
+                    print disp_strs.append("{:s} = {:0.6f}".format(label, 1.0 * rval[label] / n_examples))
+
+            print "[{:d}/{:d}] {:s}".format(n_examples, feeder.get_num_examples(), ", ".join(disp_strs))
 
     for label in compute_labels + feed_labels:
         if rval[label].shape == ():
