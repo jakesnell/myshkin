@@ -25,12 +25,16 @@ class FeedRandomStream(object):
         return self.fun(len(indices))
 
 class Feeder(object):
-    def __init__(self, bindings, batch_size=128):
+    def __init__(self, bindings, batch_size=128, num_examples=None):
         self.bindings = bindings
         self.batch_size = batch_size
+        self.num_examples = num_examples
 
     def get_num_examples(self):
-        return self.bindings.values()[0].get_num_examples()
+        if self.num_examples is None:
+            return self.bindings.values()[0].get_num_examples()
+        else:
+            return self.num_examples
 
     def feeds(self, shuffle=True, include_size=False):
         n_examples = self.get_num_examples()
@@ -50,6 +54,12 @@ class Feeder(object):
                 yield feed_dict
             ind = batch_end
 
+    def truncate(self, num_examples):
+        assert num_examples <= self.get_num_examples()
+        return Feeder(self.bindings,
+                      batch_size=self.batch_size,
+                      num_examples=num_examples)
+
 def reduce_batches(sess, bindings, feeder, updates=[], shuffle=True, verbose=False):
     # bindings: dict of label => tensor
     # feeder.bindings: dict of tensor => Feed
@@ -60,7 +70,11 @@ def reduce_batches(sess, bindings, feeder, updates=[], shuffle=True, verbose=Fal
 
     n_examples = 0
     for bs, feed in feeder.feeds(include_size=True, shuffle=shuffle):
-        batch_result = sess.run([bindings[label] for label in compute_labels] + updates, feed)
+        if len(compute_labels) > 0:
+            batch_result = sess.run([bindings[label] for label in compute_labels] + updates, feed)
+        else:
+            batch_result = []
+
         for (label, val) in zip(compute_labels, batch_result) + [(feed_label, feed[bindings[feed_label]]) for feed_label in feed_labels]:
             if val.shape == ():
                 rval[label] = rval.get(label, 0.0) + bs * val

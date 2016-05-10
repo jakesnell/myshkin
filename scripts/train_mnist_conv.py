@@ -53,7 +53,7 @@ def main():
                      DeepDashboardLogger(
                          learn_opts.exp_id,
                          [RawLogger('out.log', 'Log', ['loss', 'err']),
-			  CSVLogger('loss.csv', 'Loss', ['loss']),
+                          CSVLogger('loss.csv', 'Loss', ['loss']),
                           CSVLogger('err.csv', 'Classification Error', ['err'])]
                      ),
                      EarlyStopping('loss', learn_opts.patience),

@@ -4,12 +4,14 @@ import os
 import time
 
 import numpy as np
-import matplotlib.pyplot as plt
 import tensorflow as tf
+
+import matplotlib.pyplot as plt
 
 from PIL import Image
 
 from myshkin.util.feeder import reduce_batches
+from myshkin.util.vis import patch_view, interleave
 
 class Callback(object):
     def get_monitor_fields(self):
@@ -171,34 +173,6 @@ class ImageLogger(DeepDashboardSubLogger):
     def get_monitor_fields(self):
         return []
 
-    def patch_view(self, arr, n_cols, border_width=1):
-        n_images, h, w = arr.shape
-        n_rows = int(np.ceil(1.0 * n_images / n_cols))
-
-        rval = np.zeros((n_rows * (h + border_width) + border_width + 1,
-                        n_cols * (w + border_width) + border_width))
-        rval[-1:, :] = 1.0
-
-        for ind in xrange(n_images):
-            i = int(np.floor(ind / n_cols)) * (h + border_width) + border_width
-            j = (ind % n_cols) * (w + border_width) + border_width
-            rval[i:i+h, j:j+w] = arr[ind]
-
-        return rval
-
-    def interleave(self, arrs):
-        arr_shape = arrs[0].shape
-        for i in xrange(1, len(arrs)):
-            assert arrs[i].shape == arr_shape
-
-        rval = np.empty((arr_shape[0] * len(arrs),) + arr_shape[1:])
-
-        for j in xrange(arr_shape[0]):
-            for (i, arr) in enumerate(arrs):
-                rval[j * len(arrs) + i] = arr[j]
-
-        return rval
-
     def epoch_end(self, epoch_ind, sess, model, train_stats, valid_stats):
         images = reduce_batches(sess,
                     {
@@ -207,9 +181,8 @@ class ImageLogger(DeepDashboardSubLogger):
                     },
                     self.feeder,
                     shuffle=False)
-        image_arr = self.interleave([images[i] for i in xrange(len(self.image_tensors))])
-        im = Image.fromarray(255.0 * self.patch_view(image_arr, self.n_cols)).convert('RGB')
-        im.save(self.get_file_name())
+        image_arr = interleave([images[i] for i in xrange(len(self.image_tensors))])
+        plt.imsave(self.get_file_name(), patch_view(image_arr, self.n_cols))
 
 class EarlyStopping(Callback):
     def __init__(self, monitor_field, patience):
