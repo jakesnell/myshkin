@@ -1,4 +1,6 @@
 from collections import OrderedDict
+from multiprocess.pool import ApplyResult
+from pathos.pools import ProcessPool
 
 import numpy as np
 
@@ -36,26 +38,51 @@ class Feeder(object):
         else:
             return self.num_examples
 
-    def feeds(self, shuffle=True, include_size=False):
+    def feeds(self, shuffle=True, include_size=False, n_workers=4, look_ahead=5):
+        p = ProcessPool(n_workers)
+
         n_examples = self.get_num_examples()
         indices = np.arange(n_examples)
 
         if shuffle:
             np.random.shuffle(indices)
 
-        ind = 0
-        while ind < n_examples:
-            batch_end = min(ind + self.batch_size, n_examples)
-            batch_inds = indices[ind:batch_end]
-            feed_dict = {k: v.get_examples(batch_inds) for (k, v) in self.bindings.iteritems()}
+        def batch_ind_iter(n_examples):
+            ind = 0
+            while ind < n_examples:
+                batch_end = min(ind + self.batch_size, n_examples)
+                batch_inds = indices[ind:batch_end]
+                yield batch_inds
+                ind = batch_end
+
+        batches = [x for x in batch_ind_iter(n_examples)]
+        feed_dicts = {}
+        for ib in xrange(len(batches)):
+            if ib not in feed_dicts:
+                feed_dicts[ib] = {k: p.apipe(v.get_examples, batches[ib]) \
+                                    if not isinstance(v, FeedRandomStream) \
+                                    else v.get_examples(batches[ib]) \
+                                  for (k, v) in self.bindings.iteritems()}
+
+            for j in xrange(1, look_ahead+1):
+                if ib + j < len(batches) and (ib + j) not in feed_dicts:
+                    feed_dicts[ib+j] = {k: p.apipe(v.get_examples, batches[ib+j]) \
+                                           if not isinstance(v, FeedRandomStream) \
+                                           else v.get_examples(batches[ib+j]) \
+                                        for (k, v) in self.bindings.iteritems()}
+
+            feed_dict = {k: v.get() if isinstance(v, ApplyResult) else v \
+                         for (k, v) in feed_dicts[ib].iteritems()}
+
             if include_size:
-                yield batch_end - ind, feed_dict
+                yield len(batches[ib]), feed_dict
             else:
                 yield feed_dict
-            ind = batch_end
+
+            del feed_dicts[ib]
 
     def truncate(self, num_examples):
-        assert num_examples <= self.get_num_examples()
+        assert self.get_num_examples() is None or num_examples <= self.get_num_examples()
         return Feeder(self.bindings,
                       batch_size=self.batch_size,
                       num_examples=num_examples)
@@ -70,7 +97,7 @@ def reduce_batches(sess, bindings, feeder, updates=[], shuffle=True, verbose=Fal
 
     n_examples = 0
     for bs, feed in feeder.feeds(include_size=True, shuffle=shuffle):
-        if len(compute_labels) > 0:
+        if len(compute_labels) >= 1:
             batch_result = sess.run([bindings[label] for label in compute_labels] + updates, feed)
         else:
             batch_result = []
