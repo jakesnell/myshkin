@@ -1,6 +1,7 @@
 import os
+import gpu_lock2 as gg
 
-if 'guppy' in os.uname()[1] or 'node' in os.uname()[1]:
+if len(gg.board_ids()) > 0:
     from util.gpu import get_board
     board = get_board()
     print "using board: {:d}".format(board)
