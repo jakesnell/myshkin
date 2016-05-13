@@ -1,6 +1,6 @@
 import os
 
-if 'guppy' in os.uname()[1]:
+if 'guppy' in os.uname()[1] or 'node' in os.uname()[1]:
     from util.gpu import get_board
     board = get_board()
     print "using board: {:d}".format(board)
