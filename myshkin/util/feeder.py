@@ -26,6 +26,37 @@ class FeedRandomStream(object):
     def get_examples(self, indices):
         return self.fun(len(indices))
 
+class BatchFetcher(object):
+    def __init__(self, bindings, batch_inds, n_workers=0):
+        self.bindings = bindings
+        self.batch_inds = batch_inds
+        self.n_workers = n_workers
+        self.batches = {}
+
+        if n_workers > 0:
+            self.p = ProcessPool(self.n_workers)
+
+    def fetch_async(self, ib):
+        if ib not in self.batches:
+            if self.n_workers > 0:
+                self.batches[ib] = {k: p.apipe(v.get_examples, self.batch_inds[ib]) \
+                                        if not isinstance(v, FeedRandomStream) \
+                                        else v.get_examples(self.batch_inds[ib]) \
+                                    for (k, v) in self.bindings.iteritems()}
+            else:
+                self.batches[ib] = {k: v.get_examples(self.batch_inds[ib]) \
+                                    for (k, v) in self.bindings.iteritems()}
+
+    def retrieve_batch(self, ib):
+        self.fetch_async(ib)
+        assert ib in self.batches
+
+        return {k: v.get() if isinstance(v, ApplyResult) else v \
+                for (k, v) in self.batches[ib].iteritems()}
+
+    def del_batch(self, ib):
+        del self.batches[ib]
+
 class Feeder(object):
     def __init__(self, bindings, batch_size=128, num_examples=None):
         self.bindings = bindings
@@ -38,9 +69,7 @@ class Feeder(object):
         else:
             return self.num_examples
 
-    def feeds(self, shuffle=True, include_size=False, n_workers=4, look_ahead=5):
-        p = ProcessPool(n_workers)
-
+    def feeds(self, shuffle=True, include_size=False, n_workers=0, look_ahead=5):
         n_examples = self.get_num_examples()
         indices = np.arange(n_examples)
 
@@ -55,31 +84,22 @@ class Feeder(object):
                 yield batch_inds
                 ind = batch_end
 
-        batches = [x for x in batch_ind_iter(n_examples)]
+        batch_inds = [x for x in batch_ind_iter(n_examples)]
+        batch_fetcher = BatchFetcher(self.bindings, batch_inds, n_workers=n_workers)
+
         feed_dicts = {}
-        for ib in xrange(len(batches)):
-            if ib not in feed_dicts:
-                feed_dicts[ib] = {k: p.apipe(v.get_examples, batches[ib]) \
-                                    if not isinstance(v, FeedRandomStream) \
-                                    else v.get_examples(batches[ib]) \
-                                  for (k, v) in self.bindings.iteritems()}
+        for ib in xrange(len(batch_inds)):
+            for j in xrange(0, look_ahead+1):
+                batch_fetcher.fetch_async(ib)
 
-            for j in xrange(1, look_ahead+1):
-                if ib + j < len(batches) and (ib + j) not in feed_dicts:
-                    feed_dicts[ib+j] = {k: p.apipe(v.get_examples, batches[ib+j]) \
-                                           if not isinstance(v, FeedRandomStream) \
-                                           else v.get_examples(batches[ib+j]) \
-                                        for (k, v) in self.bindings.iteritems()}
-
-            feed_dict = {k: v.get() if isinstance(v, ApplyResult) else v \
-                         for (k, v) in feed_dicts[ib].iteritems()}
+            feed_dict = batch_fetcher.retrieve_batch(ib)
 
             if include_size:
-                yield len(batches[ib]), feed_dict
+                yield len(batch_inds[ib]), feed_dict
             else:
                 yield feed_dict
 
-            del feed_dicts[ib]
+            batch_fetcher.del_batch(ib)
 
     def truncate(self, num_examples):
         assert self.get_num_examples() is None or num_examples <= self.get_num_examples()
