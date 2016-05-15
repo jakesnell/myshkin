@@ -26,6 +26,9 @@ class Callback(object):
     def stop_training_message(self):
         raise NotImplementedError()
 
+    def training_end(self):
+        pass
+
 class DefaultLogger(Callback):
     def __init__(self, monitor_fields):
         self.monitor_fields = monitor_fields
@@ -48,6 +51,9 @@ class DefaultLogger(Callback):
             valid_strings.append("valid {:s} = {:0.8f}".format(field, valid_stats[field]))
 
         print "Epoch {:d}: {:s}, {:s} ({:0.2f}s)".format(epoch_ind, ", ".join(train_strings), ", ".join(valid_strings), t_elapsed)
+
+    def training_end(self):
+        print "Training completed"
 
 class DeepDashboardLogger(Callback):
     def __init__(self, exp_id, loggers):
@@ -81,6 +87,10 @@ class DeepDashboardLogger(Callback):
     def epoch_end(self, epoch_ind, sess, model, train_stats, valid_stats):
         for logger in self.loggers:
             logger.epoch_end(epoch_ind, sess, model, train_stats, valid_stats)
+
+    def training_end(self):
+        for logger in self.loggers:
+            logger.training_end()
 
 class DeepDashboardSubLogger(Callback):
     def register_master(self, master):
@@ -126,6 +136,10 @@ class RawLogger(DeepDashboardSubLogger):
 
         with open(self.get_file_name(), 'a') as fid:
             fid.write("Epoch {:d}: {:s}, {:s} ({:0.2f}s)\n".format(epoch_ind, ", ".join(train_strings), ", ".join(valid_strings), t_elapsed))
+
+    def training_end(self):
+        with open(self.get_file_name(), 'a') as fid:
+            fid.write("Training completed\n")
 
 class CSVLogger(DeepDashboardSubLogger):
     def __init__(self, base_file, label, monitor_fields):
@@ -182,7 +196,11 @@ class ImageLogger(DeepDashboardSubLogger):
                     self.feeder,
                     shuffle=False)
         image_arr = interleave([images[i] for i in xrange(len(self.image_tensors))])
-        plt.imsave(self.get_file_name(), patch_view(image_arr, self.n_cols))
+        pane = patch_view(image_arr, self.n_cols)
+        if pane.ndim == 2:
+            plt.imsave(self.get_file_name(), pane, cmap="gray")
+        else:
+            plt.imsave(self.get_file_name(), pane)
 
 class EarlyStopping(Callback):
     def __init__(self, monitor_field, patience):

@@ -32,3 +32,4 @@ def fit(model, optimizer, train_feeder, valid_feeder, sess, n_epochs=100, callba
     for callback in callbacks:
         if callback.stop_training():
             print callback.stop_training_message()
+        callback.training_end()

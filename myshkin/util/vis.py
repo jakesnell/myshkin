@@ -13,6 +13,9 @@ def patch_view(arr, n_cols, border_width=1):
         j = (ind % n_cols) * (w + border_width) + border_width
         rval[i:i+h, j:j+w, :] = arr[ind]
 
+    if rval.shape[2] == 1:
+        rval = rval[:, :, 0]
+
     return rval
 
 def interleave(arrs):
