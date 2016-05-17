@@ -26,6 +26,19 @@ class FeedRandomStream(object):
     def get_examples(self, indices):
         return self.fun(len(indices))
 
+class FeedIndexedArray(object):
+    def __init__(self, index_arr, arr):
+        assert index_arr.ndim == 1
+        assert np.max(index_arr) < arr.shape[0]
+        self.index_arr = index_arr
+        self.arr = arr
+
+    def get_num_examples(self):
+        return self.index_arr.shape[0]
+
+    def get_examples(self, indices):
+        return self.arr[self.index_arr[indices]]
+
 class BatchFetcher(object):
     def __init__(self, bindings, batch_inds, n_workers=0):
         self.bindings = bindings
