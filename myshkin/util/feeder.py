@@ -1,6 +1,7 @@
 from collections import OrderedDict
 from multiprocess.pool import ApplyResult
 from pathos.pools import ProcessPool
+from itertools import izip
 
 import numpy as np
 
@@ -119,6 +120,72 @@ class Feeder(object):
         return Feeder(self.bindings,
                       batch_size=self.batch_size,
                       num_examples=num_examples)
+
+class ZippedFeeder(object):
+    def __init__(self, feeders):
+        self.feeders = feeders
+
+        for feeder in self.feeders[1:]:
+            assert feeder.batch_size == self.feeders[0].batch_size, \
+                   "all feeders in a zipped feeder must have the same batch size"
+
+    def feeds(self, shuffle=True, **kwargs):
+        if not isinstance(shuffle, list):
+            shuffle = [shuffle] * len(self.feeders)
+
+        assert len(shuffle) == len(self.feeders)
+
+        for t in izip(*[feeder.feeds(shuffle=sval, **kwargs) for (feeder, sval) in zip(self.feeders, shuffle)]):
+            feed_dict = {}
+            for d in t:
+                feed_dict.update(d)
+
+            batch_size = np.min([v.shape[0] for v in feed_dict.values()])
+            yield {k: v[:batch_size] for (k, v) in feed_dict.iteritems()}
+
+    def truncate(self, num_examples):
+        return ZippedFeeder([feeder.truncate(num_examples) for feeder in self.feeders])
+
+class RepeatedFeeder(object):
+    def __init__(self, feeder, batch_size, num_examples=None):
+        self.feeder = feeder
+        self.batch_size = batch_size
+        self.num_examples = None
+
+    def feeds(self, **kwargs):
+        def merge_feed(feed_dict, feed):
+            if len(feed_dict.keys()) == 0:
+                return feed
+            else:
+                assert set(feed_dict.keys()) == set(feed.keys())
+                return {k: np.concatenate([v, feed[k]], axis=0)
+                        for (k, v) in feed_dict.iteritems()}
+
+        n_remaining = self.num_examples
+
+        feed_dict = {}
+        while True:
+            for feed in self.feeder.feeds(**kwargs):
+                # process feed
+                feed_dict = merge_feed(feed_dict, feed)
+
+                # yield as much as we can
+                n_target = min(self.batch_size, n_remaining) if n_remaining is not None else self.batch_size
+                while feed_dict.values()[0].shape[0] >= n_target and (n_remaining is None or n_remaining > 0):
+                    rval = {k: v[:n_target] for (k, v) in feed_dict.iteritems()}
+                    yield rval
+                    feed_dict = {k: v[n_target:] for (k, v) in feed_dict.iteritems()}
+                    if n_remaining is not None:
+                        n_remaining -= n_target
+                    n_target = min(self.batch_size, n_remaining) if n_remaining is not None else self.batch_size
+
+                assert n_remaining is None or n_remaining >= 0
+                if n_remaining == 0:
+                    break
+
+    def truncate(self, num_examples):
+        assert self.num_examples is None or num_examples <= self.num_examples
+        return RepeatedFeeder(self.feeder, self.batch_size, num_examples=num_examples)
 
 def reduce_batches(sess, bindings, feeder, updates=[], shuffle=True, verbose=False):
     # bindings: dict of label => tensor
