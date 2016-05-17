@@ -125,10 +125,6 @@ class ZippedFeeder(object):
     def __init__(self, feeders):
         self.feeders = feeders
 
-        for feeder in self.feeders[1:]:
-            assert feeder.batch_size == self.feeders[0].batch_size, \
-                   "all feeders in a zipped feeder must have the same batch size"
-
     def feeds(self, shuffle=True, **kwargs):
         if not isinstance(shuffle, list):
             shuffle = [shuffle] * len(self.feeders)
@@ -140,8 +136,7 @@ class ZippedFeeder(object):
             for d in t:
                 feed_dict.update(d)
 
-            batch_size = np.min([v.shape[0] for v in feed_dict.values()])
-            yield {k: v[:batch_size] for (k, v) in feed_dict.iteritems()}
+            yield feed_dict
 
     def truncate(self, num_examples):
         return ZippedFeeder([feeder.truncate(num_examples) for feeder in self.feeders])
