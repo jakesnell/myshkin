@@ -109,7 +109,7 @@ class Feeder(object):
             feed_dict = batch_fetcher.retrieve_batch(ib)
 
             if include_size:
-                yield len(batch_inds[ib]), feed_dict
+                yield {k: len(batch_inds[ib]) for k in self.bindings.keys()}, feed_dict
             else:
                 yield feed_dict
 
@@ -128,18 +128,40 @@ class ZippedFeeder(object):
     def __init__(self, feeders):
         self.feeders = feeders
 
-    def feeds(self, shuffle=True, **kwargs):
+    def feeds(self, shuffle=True, include_size=False, **kwargs):
         if not isinstance(shuffle, list):
             shuffle = [shuffle] * len(self.feeders)
 
         assert len(shuffle) == len(self.feeders)
 
-        for t in izip(*[feeder.feeds(shuffle=sval, **kwargs) for (feeder, sval) in zip(self.feeders, shuffle)]):
+
+        def bs_izip(*iterables):
+            # izip('ABCD', 'xy') --> Ax By
+            iterators = map(iter, iterables)
+            while iterators:
+                vals = map(next, iterators)
+                yield tuple([v[0] for v in vals]), tuple([v[1] for v in vals])
+
+        zipfun = bs_izip if include_size else izip
+
+        for t in zipfun(*[feeder.feeds(shuffle=sval, include_size=include_size, **kwargs)
+                          for (feeder, sval) in zip(self.feeders, shuffle)]):
+            if include_size:
+                bs_t, feed_t = t
+            else:
+                feed_t = t
+
             feed_dict = {}
-            for d in t:
+            for d in feed_t:
                 feed_dict.update(d)
 
-            yield feed_dict
+            if include_size:
+                bs_dict = {}
+                for d in bs_t:
+                    bs_dict.update(d)
+                yield bs_dict, feed_dict
+            else:
+                yield feed_dict
 
     def truncate(self, num_examples):
         return ZippedFeeder([feeder.truncate(num_examples) for feeder in self.feeders])
@@ -147,13 +169,23 @@ class ZippedFeeder(object):
     def bindings_keys(self):
         return list(set(sum([feeder.bindings_keys() for feeder in self.feeders], [])))
 
+    def get_num_examples(self):
+        finite_nexamples = filter(lambda x: x is not None,
+                                  [feeder.get_num_examples()
+                                   for feeder in self.feeders])
+        assert len(finite_nexamples) > 0, "ZippedFeeder will never terminate"
+        return np.min(finite_nexamples)
+
 class RepeatedFeeder(object):
     def __init__(self, feeder, batch_size, num_examples=None):
         self.feeder = feeder
         self.batch_size = batch_size
-        self.num_examples = None
+        self.num_examples = num_examples
 
-    def feeds(self, **kwargs):
+    def get_num_examples(self):
+        return self.num_examples
+
+    def feeds(self, include_size=False, **kwargs):
         def merge_feed(feed_dict, feed):
             if len(feed_dict.keys()) == 0:
                 return feed
@@ -166,7 +198,12 @@ class RepeatedFeeder(object):
 
         feed_dict = {}
         while True:
-            for feed in self.feeder.feeds(**kwargs):
+            for fval in self.feeder.feeds(include_size=include_size, **kwargs):
+                if include_size:
+                    _, feed = fval
+                else:
+                    feed = fval
+
                 # process feed
                 feed_dict = merge_feed(feed_dict, feed)
 
@@ -174,7 +211,10 @@ class RepeatedFeeder(object):
                 n_target = min(self.batch_size, n_remaining) if n_remaining is not None else self.batch_size
                 while feed_dict.values()[0].shape[0] >= n_target and (n_remaining is None or n_remaining > 0):
                     rval = {k: v[:n_target] for (k, v) in feed_dict.iteritems()}
-                    yield rval
+                    if include_size:
+                        yield {k: n_target for k in feed_dict.keys()}, rval
+                    else:
+                        yield rval
                     feed_dict = {k: v[n_target:] for (k, v) in feed_dict.iteritems()}
                     if n_remaining is not None:
                         n_remaining -= n_target
@@ -199,8 +239,8 @@ def reduce_batches(sess, bindings, feeder, updates=[], shuffle=True, verbose=Fal
 
     rval = OrderedDict({})
 
-    n_examples = 0
-    for bs, feed in feeder.feeds(include_size=True, shuffle=shuffle):
+    n_examples = {}
+    for ib, (bs_dict, feed) in enumerate(feeder.feeds(include_size=True, shuffle=shuffle)):
         if len(compute_labels) >= 1:
             batch_result = sess.run([bindings[label] for label in compute_labels] + updates, feed)
         else:
@@ -208,22 +248,24 @@ def reduce_batches(sess, bindings, feeder, updates=[], shuffle=True, verbose=Fal
 
         for (label, val) in zip(compute_labels, batch_result) + [(feed_label, feed[bindings[feed_label]]) for feed_label in feed_labels]:
             if val.shape == ():
-                rval[label] = rval.get(label, 0.0) + bs * val
+                rval[label] = rval.get(label, 0.0) + bs_dict[bindings[label]] * val
             else:
                 rval[label] = np.concatenate([rval.get(label, np.empty((0,) + val.shape[1:])), val], axis=0)
 
-        n_examples += bs
+            if label not in n_examples:
+                n_examples[label] = 0
+            n_examples[label] += bs_dict[bindings[label]]
 
         if verbose:
             disp_strs = []
             for label in rval.keys():
                 if rval[label].shape == ():
-                    disp_strs.append("{:s} = {:0.6f}".format(label, 1.0 * rval[label] / n_examples))
+                    disp_strs.append("{:s} = {:0.6f}".format(label, 1.0 * rval[label] / n_examples[label]))
 
-            print "[{:d}/{:d}] {:s}".format(n_examples, feeder.get_num_examples(), ", ".join(disp_strs))
+            print "[Batch {:d}] {:s}".format(ib, ", ".join(disp_strs))
 
     for label in compute_labels + feed_labels:
         if rval[label].shape == ():
-            rval[label] /= n_examples
+            rval[label] /= n_examples[label]
 
     return rval
