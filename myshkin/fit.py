@@ -4,14 +4,14 @@ import tensorflow as tf
 
 from myshkin.util.feeder import reduce_batches
 
-def fit(model, optimizer, train_feeder, valid_feeder, sess, n_epochs=100, callbacks=[], train_vars=None, verbose=False):
+def fit(model, loss, optimizer, train_feeder, valid_feeder, sess, n_epochs=100, callbacks=[], train_vars=None, verbose=False):
     monitor_fields = list(set(reduce(add, [callback.get_monitor_fields() for callback in callbacks])))
 
     ext_vars = set(tf.all_variables())
     if train_vars is None:
-        train_step = optimizer.minimize(model.view.loss)
+        train_step = optimizer.minimize(loss)
     else:
-        train_step = optimizer.minimize(model.view.loss, var_list=train_vars)
+        train_step = optimizer.minimize(loss, var_list=train_vars)
     sess.run(tf.initialize_variables(set(tf.all_variables()) - ext_vars))
 
     for callback in callbacks:

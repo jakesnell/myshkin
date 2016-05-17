@@ -47,8 +47,10 @@ class DefaultLogger(Callback):
         valid_strings = []
 
         for field in self.monitor_fields:
-            train_strings.append("train {:s} = {:0.8f}".format(field, train_stats[field]))
-            valid_strings.append("valid {:s} = {:0.8f}".format(field, valid_stats[field]))
+            assert train_stats[field].ndim == 1
+            assert valid_stats[field].ndim == 1
+            train_strings.append("train {:s} = {:0.8f}".format(field, np.mean(train_stats[field])))
+            valid_strings.append("valid {:s} = {:0.8f}".format(field, np.mean(valid_stats[field])))
 
         print "Epoch {:d}: {:s}, {:s} ({:0.2f}s)".format(epoch_ind, ", ".join(train_strings), ", ".join(valid_strings), t_elapsed)
 
@@ -131,8 +133,10 @@ class RawLogger(DeepDashboardSubLogger):
         valid_strings = []
 
         for field in self.monitor_fields:
-            train_strings.append("train {:s} = {:0.8f}".format(field, train_stats[field]))
-            valid_strings.append("valid {:s} = {:0.8f}".format(field, valid_stats[field]))
+            assert train_stats[field].ndim == 1
+            assert valid_stats[field].ndim == 1
+            train_strings.append("train {:s} = {:0.8f}".format(field, np.mean(train_stats[field])))
+            valid_strings.append("valid {:s} = {:0.8f}".format(field, np.mean(valid_stats[field])))
 
         with open(self.get_file_name(), 'a') as fid:
             fid.write("Epoch {:d}: {:s}, {:s} ({:0.2f}s)\n".format(epoch_ind, ", ".join(train_strings), ", ".join(valid_strings), t_elapsed))
@@ -166,8 +170,13 @@ class CSVLogger(DeepDashboardSubLogger):
         time_str = datetime.datetime.utcnow().isoformat()
 
         with open(self.get_file_name(), 'a') as fid:
-            train_strings = ["{:0.8f}".format(train_stats[field]) for field in self.monitor_fields]
-            valid_strings = ["{:0.8f}".format(valid_stats[field]) for field in self.monitor_fields]
+            train_strings = []
+            valid_strings = []
+            for field in self.monitor_fields:
+                assert train_stats[field].ndim == 1
+                assert valid_stats[field].ndim == 1
+                train_strings.append("{:0.8f}".format(np.mean(train_stats[field])))
+                valid_strings.append("{:0.8f}".format(np.mean(valid_stats[field])))
             fid.write("{:d},{:s},{:s},{:s}\n".format(epoch_ind,
                                                      time_str,
                                                      ",".join(train_strings),
@@ -216,7 +225,8 @@ class EarlyStopping(Callback):
         return [self.monitor_field]
 
     def epoch_end(self, epoch_ind, sess, model, train_stats, valid_stats):
-        cur_val = valid_stats[self.monitor_field]
+        assert valid_stats[self.monitor_field].ndim == 1
+        cur_val = np.mean(valid_stats[self.monitor_field])
 
         if cur_val < self.opt_val:
             self.opt_val = cur_val
@@ -248,7 +258,8 @@ class ModelCheckpoint(Callback):
         return [self.monitor_field]
 
     def epoch_end(self, epoch_ind, sess, model, train_stats, valid_stats):
-        cur_val = valid_stats[self.monitor_field]
+        assert valid_stats[self.monitor_field].ndim == 1
+        cur_val = np.mean(valid_stats[self.monitor_field])
 
         if cur_val < self.opt_val:
             model_out_file = os.path.join(self.out_dir, "model.ckpt".format(epoch_ind))
