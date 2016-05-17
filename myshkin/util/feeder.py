@@ -121,6 +121,9 @@ class Feeder(object):
                       batch_size=self.batch_size,
                       num_examples=num_examples)
 
+    def bindings_keys(self):
+        return self.bindings.keys()
+
 class ZippedFeeder(object):
     def __init__(self, feeders):
         self.feeders = feeders
@@ -140,6 +143,9 @@ class ZippedFeeder(object):
 
     def truncate(self, num_examples):
         return ZippedFeeder([feeder.truncate(num_examples) for feeder in self.feeders])
+
+    def bindings_keys(self):
+        return list(set(sum([feeder.bindings_keys() for feeder in self.feeders], [])))
 
 class RepeatedFeeder(object):
     def __init__(self, feeder, batch_size, num_examples=None):
@@ -182,11 +188,14 @@ class RepeatedFeeder(object):
         assert self.num_examples is None or num_examples <= self.num_examples
         return RepeatedFeeder(self.feeder, self.batch_size, num_examples=num_examples)
 
+    def bindings_keys(self):
+        return self.feeder.bindings_keys()
+
 def reduce_batches(sess, bindings, feeder, updates=[], shuffle=True, verbose=False):
     # bindings: dict of label => tensor
     # feeder.bindings: dict of tensor => Feed
-    compute_labels = [k for (k, v) in bindings.iteritems() if v not in feeder.bindings.keys()]
-    feed_labels = [k for (k, v) in bindings.iteritems() if v in feeder.bindings.keys()]
+    compute_labels = [k for (k, v) in bindings.iteritems() if v not in feeder.bindings_keys()]
+    feed_labels = [k for (k, v) in bindings.iteritems() if v in feeder.bindings_keys()]
 
     rval = OrderedDict({})
 
