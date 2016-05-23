@@ -7,7 +7,7 @@ def load_model(opts_file, model_module='myshkin.models', opts={}, **kwargs):
         opts_dict = AttrDict(yaml.load(f))
 
     for (k, v) in opts.iteritems():
-        opts_dict.opts[k] = v
+        opts_dict['opts'][k] = v
 
     return load_model_from_dict(opts_dict, model_module=model_module, **kwargs)
 
