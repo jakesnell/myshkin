@@ -2,9 +2,12 @@ from attrdict import AttrDict
 import importlib
 import yaml
 
-def load_model(opts_file, model_module='myshkin.models', **kwargs):
+def load_model(opts_file, model_module='myshkin.models', opts={}, **kwargs):
     with open(opts_file, 'r') as f:
         opts_dict = AttrDict(yaml.load(f))
+
+    for (k, v) in opts.iteritems():
+        opts_dict.opts[k] = v
 
     return load_model_from_dict(opts_dict, model_module=model_module, **kwargs)
 
