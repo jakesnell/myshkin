@@ -183,12 +183,13 @@ class CSVLogger(DeepDashboardSubLogger):
                                                      ",".join(valid_strings)))
 
 class ImageLogger(DeepDashboardSubLogger):
-    def __init__(self, base_file, label, image_tensors, feeder, n_cols):
+    def __init__(self, base_file, label, image_tensors, feeder, n_cols, resize=None):
         self.base_file = base_file
         self.label = label
         self.image_tensors = image_tensors
         self.feeder = feeder
         self.n_cols = n_cols
+        self.resize = resize
 
     def get_catalog_entry(self):
         return "{:s},image,{:s}".format(os.path.basename(self.base_file), self.label)
@@ -205,6 +206,14 @@ class ImageLogger(DeepDashboardSubLogger):
                     self.feeder,
                     shuffle=False)
         image_arr = interleave([images[i] for i in xrange(len(self.image_tensors))])
+
+        if self.resize is not None:
+            import skimage.transform
+            image_arr = np.concatenate([
+                skimage.transform.resize(image_arr[i], self.resize)[np.newaxis, ...]
+                for i in xrange(image_arr.shape[0])],
+                axis=0)
+
         pane = patch_view(image_arr, self.n_cols)
         if pane.ndim == 2:
             plt.imsave(self.get_file_name(), pane, cmap="gray")
