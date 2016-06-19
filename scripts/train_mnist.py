@@ -49,17 +49,17 @@ def main():
 
         optimizer = tf.train.AdamOptimizer(learning_rate=1e-4)
 
-        callbacks = [DefaultLogger(['loss', 'err']),
+        callbacks = [DefaultLogger(['loss_b', 'err_b']),
                      DeepDashboardLogger(
                          learn_opts.exp_id,
-                         [RawLogger('out.log', 'Log', ['loss', 'err']),
-              CSVLogger('loss.csv', 'Loss', ['loss']),
-                          CSVLogger('err.csv', 'Classification Error', ['err'])]
+                         [RawLogger('out.log', 'Log', ['loss_b', 'err_b']),
+                          CSVLogger('loss.csv', 'Loss', ['loss_b']),
+                          CSVLogger('err.csv', 'Classification Error', ['err_b'])]
                      ),
-                     EarlyStopping('loss', learn_opts.patience),
+                     EarlyStopping('loss_b', learn_opts.patience),
                      ModelCheckpoint(os.path.join(os.getenv('MYSHKIN_CHECKPOINTDIR', '.'),
                                                   learn_opts.exp_id),
-                                     'loss',
+                                     'loss_b',
                                      verbose=True)]
 
         if not args.nodash:
@@ -68,6 +68,7 @@ def main():
             print "experiment id: {:s}".format(learn_opts.exp_id)
 
         fit(model,
+            tf.reduce_mean(model.view.loss_b),
             optimizer,
             train_feeder,
             valid_feeder,

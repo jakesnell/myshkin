@@ -48,16 +48,15 @@ class Feedforward(Model):
 
         y_hat_bc = tf.nn.softmax(log_y_hat_bc)
 
-        acc_b = tf.equal(tf.cast(tf.argmax(y_hat_bc, 1), tf.int32), self.y_b)
-        acc = tf.reduce_mean(tf.cast(acc_b, tf.float32))
-        err = 1.0 - acc
+        acc_b = tf.cast(tf.equal(tf.cast(tf.argmax(y_hat_bc, 1), tf.int32), self.y_b), tf.float32)
+        err_b = 1.0 - acc_b
 
         return AttrDict({
             'x_bk': self.x_bk,
             'y_b': self.y_b,
             'y_hat_bc': y_hat_bc,
             'z_bh': log_classifier_seq[-2],
-            'loss': loss,
-            'acc': acc,
-            'err': err
+            'loss_b': loss_b,
+            'acc_b': acc_b,
+            'err_b': err_b
         })
